@@ -1,30 +1,28 @@
 import os
-import openai
-from flask import Blueprint, request, jsonify
-from app.models import Mood
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model
 
-api = Blueprint('moods', __name__, url_prefix='/api/moods')
+SENTIMENT_MODEL_PATH = os.getenv('SENTIMENT_MODEL_PATH')
 
-openai.api_key = os.environ.get('OPENAI_API_KEY')
+class MoodSentimentAnalyzer:
+    def __init__(self):
+        self.sentiment_model = load_model(SENTIMENT_MODEL_PATH)
 
-@api.route('/', methods=['POST'])
-def create_mood():
-    data = request.get_json()
-    text = data['text']
-    response = openai.Completion.create(
-        engine="text-davinci-002",
-        prompt=f"Analyze the sentiment of the following text: {text}",
-        max_tokens=1,
-        n=1,
-        stop=None,
-        temperature=0.5,
-    )
-    sentiment = response.choices[0].text.strip()
-    mood = Mood(text=text, sentiment=sentiment)
-    mood.save()
-    return jsonify({
-        'id': mood.id,
-        'text': mood.text,
-        'sentiment': mood.sentiment,
-        'created_at': mood.created_at.isoformat()
-    })
+    def analyze_sentiment(self, mood_text):
+        sentiment_input = np.array([mood_text])
+        sentiment_scores = self.sentiment_model.predict(sentiment_input)
+        return sentiment_scores[0]
+
+class MoodAPI:
+    def __init__(self):
+        self.sentiment_analyzer = MoodSentimentAnalyzer()
+
+    def create_mood_entry(self, user_id, mood_text):
+        sentiment_scores = self.sentiment_analyzer.analyze_sentiment(mood_text)
+        # Save mood entry with sentiment scores to the database
+        return {
+            'user_id': user_id,
+            'mood_text': mood_text,
+            'sentiment_scores': sentiment_scores.tolist()
+        }
